@@ -1,30 +1,45 @@
 import streamlit as st
 import PyPDF2
-from openai import OpenAI
+import google.generativeai as genai
+import os
 import io
 
+# ===============================================================
+# CONFIGURAZIONE BASE
+# ===============================================================
 st.set_page_config(page_title="PDF Synth & Test Generator", page_icon="📚", layout="centered")
 
-st.title("📚 Dashboard PDF – Sintesi e Generazione di Test")
+st.title("📚 Dashboard PDF – Sintesi e Generazione di Test (Google Gemini)")
 
 st.markdown("""
 Carica uno o più file PDF e scegli se generare:
 - una **sintesi strutturata** del contenuto;
 - un **test automatico** (domande aperte o a scelta multipla).
+
+> ⚙️ Il motore di generazione utilizza **Google Gemini 1.5 Pro**.
 """)
 
+# ===============================================================
+# UPLOAD FILE
+# ===============================================================
 uploaded_files = st.file_uploader(
     "📂 Carica i tuoi file PDF",
     type=["pdf"],
     accept_multiple_files=True
 )
 
+# ===============================================================
+# SCELTA DEL TIPO DI ANALISI
+# ===============================================================
 mode = st.radio("Scegli l’operazione:", ["Sintesi", "Genera Test"])
 
 num_questions = None
 if mode == "Genera Test":
     num_questions = st.slider("Numero di domande da generare:", 5, 30, 10)
 
+# ===============================================================
+# FUNZIONE: Estrazione testo dai PDF
+# ===============================================================
 def extract_text_from_pdf(file):
     reader = PyPDF2.PdfReader(file)
     text = ""
@@ -34,6 +49,9 @@ def extract_text_from_pdf(file):
             text += page_text + "\n"
     return text
 
+# ===============================================================
+# ESECUZIONE PRINCIPALE
+# ===============================================================
 if st.button("🚀 Esegui", use_container_width=True):
     if not uploaded_files:
         st.warning("Carica almeno un file PDF.")
@@ -48,6 +66,14 @@ if st.button("🚀 Esegui", use_container_width=True):
         st.error("Non è stato possibile estrarre testo dai PDF caricati.")
         st.stop()
 
+    # -----------------------------------------------------------
+    # Configura API key di Google AI  (deve essere nei Secrets)
+    # -----------------------------------------------------------
+    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+    # -----------------------------------------------------------
+    # Costruisci il prompt per Gemini
+    # -----------------------------------------------------------
     if mode == "Sintesi":
         user_prompt = f"""Crea una sintesi accademica chiara, strutturata e completa del seguente testo:
         {all_text[:15000]}"""
@@ -57,21 +83,25 @@ if st.button("🚀 Esegui", use_container_width=True):
         Testo di riferimento:
         {all_text[:15000]}"""
 
+    # -----------------------------------------------------------
+    # Chiamata al modello di Google Gemini
+    # -----------------------------------------------------------
     try:
-        client = OpenAI()
-        with st.spinner("⏳ Elaborazione in corso..."):
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": user_prompt}],
-            )
+        with st.spinner("⏳ Elaborazione in corso…"):
+            model = genai.GenerativeModel("gemini-1.5-pro")
+            response = model.generate_content(user_prompt)
+            output = response.text.strip()
 
-        output = response.choices[0].message.content
         st.subheader(f"📝 Risultato: {mode}")
         st.write(output)
 
+        # -------------------------------------------------------
+        # Download in formato testo
+        # -------------------------------------------------------
         buffer = io.BytesIO()
         buffer.write(output.encode('utf-8'))
         buffer.seek(0)
+
         st.download_button(
             label="💾 Scarica risultato (.txt)",
             data=buffer,
@@ -81,3 +111,7 @@ if st.button("🚀 Esegui", use_container_width=True):
 
     except Exception as e:
         st.error(f"Errore durante l'elaborazione: {e}")
+
+# ===============================================================
+# FINE
+# ===============================================================
