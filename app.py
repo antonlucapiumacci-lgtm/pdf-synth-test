@@ -56,7 +56,7 @@ if st.button("🚀 Avvia Elaborazione", use_container_width=True):
     try:
         with st.spinner("⏳ Gemini sta analizzando i documenti..."):
             response = client.models.generate_content(
-                model="gemini-3-flash", 
+                model="gemini-1.5-flash", 
                 contents=prompt
             )
             output = response.text
