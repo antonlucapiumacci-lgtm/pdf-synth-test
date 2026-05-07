@@ -5,66 +5,70 @@ import os
 import io
 
 # Configurazione Pagina
-st.set_page_config(page_title="AI Studio Manager", page_icon="📚", layout="centered")
+st.set_page_config(page_title="AI Tutor Gestionale", page_icon="🎓", layout="centered")
 
 st.title("📚 Dashboard PDF – Ingegneria Gestionale")
-st.markdown("Genera sintesi e test usando **Google Gemini**.")
+st.markdown("Sintesi e Test d'esame con Google Gemini")
 
-# Caricamento file
-uploaded_files = st.file_uploader("📂 Carica i tuoi PDF", type=["pdf"], accept_multiple_files=True)
+# Upload
+uploaded_files = st.file_uploader("📂 Trascina qui i tuoi PDF", type=["pdf"], accept_multiple_files=True)
 
-# Opzioni interfaccia
-mode = st.radio("Scegli l'operazione:", ["Sintesi", "Genera Test"])
-num_q = st.slider("Numero domande:", 5, 30, 10) if mode == "Genera Test" else None
+# Selezione
+mode = st.radio("Cosa vuoi generare?", ["Sintesi", "Test di autovalutazione"])
+num_q = st.slider("Numero domande:", 5, 20, 10) if mode == "Test di autovalutazione" else None
 
 def extract_text(file):
-    reader = PyPDF2.PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        content = page.extract_text()
-        if content:
-            text += content + "\n"
-    return text
+    try:
+        reader = PyPDF2.PdfReader(file)
+        text = ""
+        for page in reader.pages:
+            content = page.extract_text()
+            if content:
+                text += content + "\n"
+        return text
+    except:
+        return ""
 
-if st.button("🚀 Avvia Elaborazione", use_container_width=True):
+if st.button("🚀 Elabora Documenti", use_container_width=True):
     if not uploaded_files:
-        st.warning("Carica almeno un file PDF.")
+        st.warning("Per favore, carica almeno un file PDF.")
         st.stop()
 
-    # Recupero chiave dai Secrets
+    # Recupero Chiave
     api_key = os.getenv("GOOGLEAPIKEY")
     if not api_key:
-        st.error("Chiave API non trovata! Controlla i Secrets di Streamlit.")
+        st.error("Errore: Chiave API non configurata nei Secrets di Streamlit.")
         st.stop()
 
-    # Configurazione Gemini
+    # Configurazione API
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # Usiamo il nome del modello senza prefissi v1/v1beta
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
     all_text = ""
     for f in uploaded_files:
         all_text += extract_text(f) + "\n"
 
-    if not all_text.strip():
-        st.error("Impossibile estrarre testo dai file caricati.")
+    if len(all_text.strip()) < 50:
+        st.error("Testo insufficiente o PDF non leggibile.")
         st.stop()
 
-    # Prompt personalizzato per il tuo percorso di studi
+    # Prompt
     if mode == "Sintesi":
-        prompt = f"Sei un tutor di Ingegneria Gestionale. Analizza il seguente testo e fanne una sintesi strutturata per punti, focalizzandoti su definizioni, modelli e formule:\n\n{all_text[:30000]}"
+        prompt = f"Sei un assistente accademico. Riassumi i concetti chiave (definizioni, modelli, formule) di questo testo in modo schematico:\n\n{all_text[:30000]}"
     else:
-        prompt = f"Genera un test di {num_q} domande (aperte e chiuse) basato sul seguente testo universitario per preparare un esame:\n\n{all_text[:30000]}"
+        prompt = f"Crea un test di {num_q} domande basato su questo testo, includendo le soluzioni alla fine:\n\n{all_text[:30000]}"
 
     try:
-        with st.spinner("⏳ Analisi in corso..."):
+        with st.spinner("⏳ Gemini sta studiando per te..."):
             response = model.generate_content(prompt)
-            output = response.text
-
-        st.subheader("📝 Risultato")
-        st.write(output)
-
-        # Bottone di download
-        st.download_button("💾 Scarica Risultato", output, file_name="studio_ai.txt")
-
+            # Verifica se la risposta è valida
+            if response.text:
+                st.subheader("📝 Risultato")
+                st.write(response.text)
+                st.download_button("💾 Scarica .txt", response.text, file_name="studio_session.txt")
+            else:
+                st.error("Gemini non ha restituito testo. Prova con un file più breve.")
     except Exception as e:
-        st.error(f"Errore durante l'elaborazione: {e}")
+        st.error(f"Errore tecnico: {str(e)}")
